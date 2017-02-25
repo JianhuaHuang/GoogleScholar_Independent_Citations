@@ -1,7 +1,7 @@
 -   [Web-scraping Independent Citations from Google Scholar](#web-scraping-independent-citations-from-google-scholar)
     -   [My Papers](#my-papers)
     -   [citing papers](#citing-papers)
--   [Find Dependent/Independent Citations](#find-dependentindependent-citations)
+    -   [Find Dependent/Independent Citations](#find-dependentindependent-citations)
 
 Web-scraping Independent Citations from Google Scholar
 ======================================================
@@ -163,7 +163,7 @@ rd$close()
 ```
 
 Find Dependent/Independent Citations
-====================================
+------------------------------------
 
 ``` r
 mps <- readRDS('Data/my_paper_refs.rds')  # my papers

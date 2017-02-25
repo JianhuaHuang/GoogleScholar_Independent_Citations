@@ -167,7 +167,7 @@ rd$close()
 ```
 
 
-# Find Dependent/Independent Citations
+## Find Dependent/Independent Citations
 ```{r}
 mps <- readRDS('Data/my_paper_refs.rds')  # my papers
 cps <- readRDS('Data/citing_paper_refs.rds')  # citing papers
