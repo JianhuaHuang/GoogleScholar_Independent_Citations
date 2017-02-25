@@ -1,15 +1,20 @@
--   [Web-scraping Independent Citations from Google Scholar](#web-scraping-independent-citations-from-google-scholar)
-    -   [My Papers](#my-papers)
-    -   [citing papers](#citing-papers)
--   [Find Dependent/Independent Citations](#find-dependentindependent-citations)
+---
+author: "Jianhua Huang" 
+date: "February 23, 2017"
+title: "Web-scraping Independent Citations from Google Scholar"
+output:
+  md_document:
+    toc: true
+    variant: markdown_github
+---
 
-Web-scraping Independent Citations from Google Scholar
-======================================================
+# Web-scraping Independent Citations from Google Scholar
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE， eval = FALSE)
+```
 
-My Papers
----------
-
-``` r
+## My Papers
+```{r}
 # https://cran.r-project.org/web/packages/RSelenium/vignettes/RSelenium-basics.html
 library(RSelenium)
 library(rvest)
@@ -83,10 +88,9 @@ rd$close()
 saveRDS(my_paper_refs, file = 'Data/my_paper_refs.rds')
 ```
 
-citing papers
--------------
 
-``` r
+## citing papers
+```{r}
 rd$open()
 rd$navigate(home_link)
 sleep()
@@ -162,10 +166,9 @@ saveRDS(citing_paper_refs, file = 'Data/citing_paper_refs.rds')
 rd$close()
 ```
 
-Find Dependent/Independent Citations
-====================================
 
-``` r
+# Find Dependent/Independent Citations
+```{r}
 mps <- readRDS('Data/my_paper_refs.rds')  # my papers
 cps <- readRDS('Data/citing_paper_refs.rds')  # citing papers
 
@@ -214,6 +217,7 @@ saveRDS(refs, 'Data/paper.references.rds')
 # write.csv(refs, 'Data/paper.references.csv', row.names = F)
 ```
 
+
 **reference:**
 
--   <http://datascience-enthusiast.com/R/google_scholar_R.html>
++ http://datascience-enthusiast.com/R/google_scholar_R.html 
