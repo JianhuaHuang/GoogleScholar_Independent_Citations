@@ -1,28 +1,38 @@
 ---
 author: "Jianhua Huang" 
 date: "February 23, 2017"
-title: "Web-scraping Independent Citations from Google Scholar"
+title: "Web-scraping Dependent/Independent Citations from Google Scholar"
 output:
+  # html_document
   md_document:
     toc: true
     variant: markdown_github
 ---
 
-# Web-scraping Independent Citations from Google Scholar
+# Web-scraping Dependent/Independent Citations from Google Scholar
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE， eval = FALSE)
-```
-
-## My Papers
-```{r}
-# https://cran.r-project.org/web/packages/RSelenium/vignettes/RSelenium-basics.html
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
 library(RSelenium)
 library(rvest)
 library(dplyr)
+library(knitr)
+library(reshape2)
+```
+
+The program is used to download the references of my own paper and the citing paper from Google Scholar, and check whether the number of dependent/independent citations based on the author names. The code needs the `Rselenium` package to mimic the human behavior to click the links and download the paper references. Follow this [link](https://cran.r-project.org/web/packages/RSelenium/vignettes/RSelenium-basics.html) to get a Selenium server, before running the following R code. In order to allow enough time for the program to open websites and download the references, the program is forced to sleep once in a while. It can also reduce the risk of being blocked by Google, by forcing the program to `sleep`. Due to the sleeping, if you have lots of paper, it make take hours to download all of the references!
+
+## My Papers
+This part is used to download the reference of my papers listed on the Google Scholar `home_link` (simply replace the `home_link` with yoru own Google Scholar home page to download your own references)
+```{r, eval=FALSE}
+library(RSelenium)
+library(rvest)
+library(dplyr)
+library(knitr)
+library(reshape2)
 
 rm(list = ls())
-sleep <- function() Sys.sleep(1 + abs(rnorm(1, mean = 1)))
-home_link <- 'https://scholar.google.com/citations?user=19Z-MdUAAAAJ&hl=en' # Liang
+sleep <- function() Sys.sleep(2 + abs(rnorm(1, mean = 1)))  # for the program to sleep
+home_link <- 'https://scholar.google.com/citations?user=Ou5J-S8AAAAJ&hl=en' # Huang
 
 
 # double click the selenium-server-standalone-3.0.1.jar file to run it
@@ -33,7 +43,8 @@ rd <- remoteDriver(browserName = "firefox")
 rd$open()
 rd$navigate(home_link)
 
-sleep()
+# in order to give enough time to load the webpage and reduce the risk of being blocked by Google, the program need to sleep for a while. 
+sleep()  
 
 # more_button <- rd$findElement(using = 'id', 'gsc_bpf_more')
 # more_button$clickElement()  # Click multiple times, if you have lots of papers
@@ -73,6 +84,7 @@ get_my_paper_ref <- function(my_paper) {
 # my_paper_refs <- c()
 my_paper_refs <- get_my_paper_ref(my_papers[[1]])
 
+# In case there is any error in the middle of the for loop, continue the loop where it broke
 for(p in 2:length(my_papers)) {
   # more_button is already clicked for p = 1
   # more_button <- rd$findElement(using = 'id', 'gsc_bpf_more')
@@ -90,7 +102,8 @@ saveRDS(my_paper_refs, file = 'Data/my_paper_refs.rds')
 
 
 ## citing papers
-```{r}
+This part is used to download all citing paper (the papers that cited your paper)
+```{r,eval=FALSE}
 rd$open()
 rd$navigate(home_link)
 sleep()
@@ -167,57 +180,107 @@ rd$close()
 ```
 
 
-## Find Dependent/Independent Citations
+## Cleaning Data
+After downloading the references of my papers and the citing papers, we can check whether there is any author appearing in both my paper and the citing paper (Non-independent citation). Before doing this, we need to clean up the references, becasue the naming of the authors are not always the same in different journals. For example, the author "First Last" in one journal may be listed as "F. Last" in another journal. In order to make them consistent, we need to clean up the references and force the authorships into the same format. 
+
+1. Load the data into R, which we have already saved in Data folder:
 ```{r}
 mps <- readRDS('Data/my_paper_refs.rds')  # my papers
 cps <- readRDS('Data/citing_paper_refs.rds')  # citing papers
+```
 
+
+Here is an example of my paper, and the corresponding citing papers
+```{r}
+cat(mps[5])
+cat(cps[[5]], sep = '\n')
+```
+
+
+2. Parsing references and convert the data into dataframe
+```{r}
 no_cite <- length(mps) - length(cps)
 
 mps.ncites <- sapply(cps, length)
 mps.ncites <- c(mps.ncites, rep(1, no_cite))
 
-refs <- data.frame(ID = rep(1:length(mps), mps.ncites), 
-  MP = rep(mps, mps.ncites), 
-  CP = c(unlist(cps), rep(NA, no_cite)))
+bibtex_parse <- function(paper) {
+  elements <- strsplit(paper, split = '\n') %>% unlist
+  elements_df <- sapply(elements[2:(length(elements) - 1)], function(e) {
+    name <- gsub('  |=.*', '', e)
+    content <- gsub('.*=\\{|\\},.*|\\}$', '', e)
 
-# compare the authors
-refs$MP_authors <- gsub('.*author=\\{', '', refs$MP) %>% 
-  gsub('},.*', '', .) %>%
-  strsplit(' and ')
-
-refs$CP_authors <- gsub('.*author=\\{', '', refs$CP) %>% 
-  gsub('},.*', '', .) %>%
-  strsplit(' and ')
+    if(name %in% c('journal', 'booktitle')) name <- 'journal_conference'
+    return(c(name, content))
+  })
+  colnames(elements_df) <- elements_df[1, ]
+  return(data.frame(t(elements_df[2, ])))
+}
+mps_df <- lapply(mps, bibtex_parse) %>% bind_rows()
+cps_df <- lapply(unlist(cps), bibtex_parse) %>% bind_rows()
 
 # the author formats are different in different papers, 
 # keep only last name and the initial of other names, to make them consistent
 Last_Initial <- function(names) {  
+  names <- strsplit(names, ' and ')[[1]]
   last <- gsub(',.*', '', names)
   initials <- sapply(strsplit(names, ', '), function(x) gsub('[^A-Z]', '', x[2]))
-  last_ini <- paste(last, initials, sep = ', ')
+  last_ini <- paste(initials, last)
+  # last_ini <- paste(last, initials, sep = ', ')
 }
 
-refs$MP_authors <- lapply(refs$MP_authors, Last_Initial)
-refs$CP_authors <- lapply(refs$CP_authors, Last_Initial)
+mps_df$author <- lapply(mps_df$author, Last_Initial)
+cps_df$author <- lapply(cps_df$author, Last_Initial)
+colnames(mps_df) <- paste0('mp.', colnames(mps_df))
+colnames(cps_df) <- paste0('cp.', colnames(cps_df))
 
-# check whether the authors are independent
-my.authors = refs$MP_authors[3]
-citing.authors = refs$CP_authors[3]
+# expand the cps_df to add NA for the no_cite papers
+cps_df[(nrow(cps_df) + 1):(nrow(cps_df) + no_cite), ] <-  NA
 
-check.independence <- function(my.authors, citing.authors) { 
-  ifelse(length(intersect(unlist(my.authors), unlist(citing.authors))) == 0,
-    'Y', 'N')
-  }
-
-refs$Independent <- apply(refs[, c('MP_authors', 'CP_authors')], 1, function(x){
-  check.independence(x[1], x[2])})
-refs$Independent[is.na(refs$CP)] <- NA
-saveRDS(refs, 'Data/paper.references.rds')
-# write.csv(refs, 'Data/paper.references.csv', row.names = F)
+refs <- data.frame(mps_df[rep(1:nrow(mps_df), mps.ncites), ], cps_df)
 ```
 
 
-**reference:**
+## Find Dependent/Independent Citations
+Now, it is ready to check whether the citations are dependent/independent based on the authors. It is important to note that, **if a paper has a long list of authors, the bibtex reference will not list all of the authors. If you find "others" in the authors, you need to fill in the "other" authors manually before you check the  dependence**. 
 
-+ http://datascience-enthusiast.com/R/google_scholar_R.html 
+
+```{r}
+check.dependence <- function(my.authors, citing.authors) { 
+  ifelse(length(intersect(unlist(my.authors), unlist(citing.authors))) == 0,
+    'N', 'Y')
+  }
+
+refs$dependent <- apply(refs[, c('mp.author', 'cp.author')], 1, function(x){
+  check.dependence(x[1], x[2])})
+refs$dependent[is.na(refs$cp.title)] <- NA
+```
+
+This is the complete dataframe including the references for my paper and citing paper, and whether the citations are dependent or independent. 
+```{r}
+kable(refs)
+```
+
+Here is the summary of dependent/independent citations for each paper:
+```{r}
+refs_sum <- dcast(refs, mp.title ~ dependent, margins = F) %>%
+  transmute(Paper = mp.title, Dependent = Y, Independent = N, All = Y + N) %>%
+  arrange(desc(All))
+refs_sum <- streamlineR::add.row(refs_sum, c('All', sum(refs_sum$Dependent), 
+  sum(refs_sum$Independent), sum(refs_sum$All)))
+kable(refs_sum)
+```
+
+Now, we can save the outputs as csv or Rdata
+```{r}
+# save the outputs
+saveRDS(refs, 'Data/paper.references.rds')
+
+# the my.author and cp.author columns are list, which can't be wrote out as csv
+# coerce them into character
+refs$mp.author <- vapply(refs$mp.author, paste, collapse = ", ", character(1L))
+refs$cp.author <- vapply(refs$cp.author, paste, collapse = ", ", character(1L))
+write.csv(refs, 'Data/paper.references.csv', row.names = F)
+write.csv(refs_sum, 'Data/references_summary.csv', row.names = F)
+```
+
